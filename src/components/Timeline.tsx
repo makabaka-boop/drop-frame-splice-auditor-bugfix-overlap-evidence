@@ -1,41 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { AnalysisResult } from '../lib/analysis';
+import { AnalysisResult, formatClipId } from '../lib/analysis';
 import { formatFrame } from '../lib/timecode';
+import { computeTimelineTicks } from '../lib/timeline';
 
 interface TimelineProps {
   result: AnalysisResult;
   pixelsPerFrame: number;
   active: boolean;
-}
-
-function chooseTickStep(pixelsPerFrame: number, targetPixels: number, dayFrames: number): number {
-  const candidates = [
-    1,
-    2,
-    5,
-    10,
-    15,
-    30,
-    60,
-    100,
-    150,
-    300,
-    600,
-    900,
-    1798,
-    1800,
-    3596,
-    3600,
-    8991,
-    9000,
-    17_982,
-    35_964,
-    53_946,
-    107_892,
-    215_784
-  ];
-
-  return candidates.find((step) => step * pixelsPerFrame >= targetPixels) ?? dayFrames;
 }
 
 export function Timeline({ result, pixelsPerFrame, active }: TimelineProps) {
@@ -70,16 +41,10 @@ export function Timeline({ result, pixelsPerFrame, active }: TimelineProps) {
     });
   }, [active, result.firstBreak]);
 
-  const ticks = useMemo(() => {
-    const step = chooseTickStep(pixelsPerFrame, 96, result.dayFrames);
-    const firstFrame = Math.max(0, Math.floor(viewport.scrollLeft / pixelsPerFrame / step) * step);
-    const lastVisibleFrame = (viewport.scrollLeft + viewport.width) / pixelsPerFrame;
-    const values: number[] = [];
-    for (let frame = firstFrame; frame <= Math.min(result.dayFrames, lastVisibleFrame + step); frame += step) {
-      values.push(frame);
-    }
-    return { step, values };
-  }, [pixelsPerFrame, viewport, result.dayFrames]);
+  const ticks = useMemo(
+    () => computeTimelineTicks(pixelsPerFrame, viewport, result.dayFrames),
+    [pixelsPerFrame, viewport, result.dayFrames]
+  );
 
   const x = (frame: number) => frame * pixelsPerFrame;
 
@@ -137,12 +102,12 @@ export function Timeline({ result, pixelsPerFrame, active }: TimelineProps) {
                 className={`clip-rect clip-${clip.relation} ${clip.firstBreak ? 'clip-first-break' : ''}`}
               >
                 <title>
-                  {`片段 ${String(clip.id)}\nrecordIn ${clip.recordIn.timecode}\nrecordOut ${clip.recordOut.timecode}\n时长 ${clip.durationFrames} 帧`}
+                  {`片段 ${formatClipId(clip.id)}\nrecordIn ${clip.recordIn.timecode}\nrecordOut ${clip.recordOut.timecode}\n时长 ${clip.durationFrames} 帧`}
                 </title>
               </rect>
               {clipWidth >= 34 && (
                 <text x={left + 6} y="67" className="clip-label">
-                  {String(clip.id)}
+                  {formatClipId(clip.id)}
                 </text>
               )}
             </g>

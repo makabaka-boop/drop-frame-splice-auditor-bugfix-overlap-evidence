@@ -8,6 +8,14 @@ import {
 
 export type ClipId = string | number;
 
+/**
+ * 展示用 id：字符串带引号、数值原样。
+ * 数值 1 与文本 "1" 都是合法 id 且互不相同，屏幕上必须能区分。
+ */
+export function formatClipId(id: ClipId): string {
+  return typeof id === 'string' ? JSON.stringify(id) : String(id);
+}
+
 export interface FrameTimecode {
   frame: number;
   timecode: string;
@@ -328,13 +336,16 @@ export function analyzeInput(rawInput: unknown): AnalysisResponse {
     }
 
     if (item.recordInFrame < coverageEnd) {
+      // 半开区间交集：重叠段在当前片段 recordOut 或既有覆盖端中较早者处截止，
+      // 长片包住短片时不得把短片结束之后、长片仍在继续的帧计入该短片的重叠。
+      const overlapEndFrame = Math.min(item.recordOutFrame, coverageEnd);
       const timelineBreak: TimelineBreak = {
         kind: 'overlap',
         afterClipId: owner.id,
         beforeClipId: item.clip.id,
         start: toFrameTimecode(item.recordInFrame, rate),
-        end: toFrameTimecode(coverageEnd, rate),
-        durationFrames: coverageEnd - item.recordInFrame,
+        end: toFrameTimecode(overlapEndFrame, rate),
+        durationFrames: overlapEndFrame - item.recordInFrame,
         first: false
       };
       breaks.push(timelineBreak);

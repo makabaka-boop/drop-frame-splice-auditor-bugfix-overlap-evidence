@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Timeline } from './components/Timeline';
 import { ResultTable } from './components/ResultTable';
 import { SAMPLE_INPUT } from './sample';
-import { AnalysisResult, ValidationIssue, analyzeInput } from './lib/analysis';
+import { AnalysisResult, ValidationIssue, analyzeInput, formatClipId } from './lib/analysis';
 
 const ZOOM_LEVELS = [
   { label: '全日览', pixelsPerFrame: 0.0002 },
@@ -192,8 +192,8 @@ export default function App() {
               <strong>第一处真实拼接断点</strong>
               <span>
                 {shownResult.firstBreak.kind === 'gap' ? '空隙' : '重叠'}：片段{' '}
-                <code>{String(shownResult.firstBreak.afterClipId)}</code> 与{' '}
-                <code>{String(shownResult.firstBreak.beforeClipId)}</code> 之间，
+                <code>{formatClipId(shownResult.firstBreak.afterClipId)}</code> 与{' '}
+                <code>{formatClipId(shownResult.firstBreak.beforeClipId)}</code> 之间，
                 {shownResult.firstBreak.start.timecode} → {shownResult.firstBreak.end.timecode}，共{' '}
                 {shownResult.firstBreak.durationFrames} 帧。
               </span>

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { analyzeInput } from './analysis';
+import { analyzeInput, formatClipId } from './analysis';
 
 const baseInput = {
   rate: '30000/1001',
@@ -102,7 +102,118 @@ describe('edit decision analysis', () => {
     const contained = response.result.clips.find((clip) => clip.id === 'inside-long');
     expect(contained?.relation).toBe('overlap');
     expect(contained?.previousClipId).toBe('long');
-    expect(contained?.overlapBeforeFrames).toBe(150);
+    // 半开区间交集：短片被完全包含时，重叠就是它自身的 60 帧，
+    // 不能把短片结束之后直到长片结束的帧计入。
+    expect(contained?.overlapBeforeFrames).toBe(60);
+    const overlapBreak = response.result.breaks.find((item) => item.beforeClipId === 'inside-long');
+    expect(overlapBreak?.durationFrames).toBe(60);
+    expect(overlapBreak?.start.timecode).toBe('00:10:05;00');
+    expect(overlapBreak?.end.timecode).toBe('00:10:07;00');
+  });
+
+  it('limits each of several short clips inside one long clip to its own half-open intersection', () => {
+    const response = analyzeInput({
+      rate: '30000/1001',
+      clips: [
+        {
+          id: 'long',
+          sourceIn: '01:00:00;00',
+          sourceOut: '01:00:10;00',
+          recordIn: '00:10:00;00'
+        },
+        {
+          id: 's1',
+          sourceIn: '02:00:00;00',
+          sourceOut: '02:00:01;00',
+          recordIn: '00:10:02;00'
+        },
+        {
+          id: 's2',
+          sourceIn: '03:00:00;00',
+          sourceOut: '03:00:01;00',
+          recordIn: '00:10:05;00'
+        }
+      ]
+    });
+    expect(response.ok).toBe(true);
+    if (!response.ok) throw new Error(response.issues[0]?.message);
+
+    const { clips, breaks, firstBreak } = response.result;
+    expect(clips.map((clip) => clip.id)).toEqual(['long', 's1', 's2']);
+    expect(clips[1].relation).toBe('overlap');
+    expect(clips[1].overlapBeforeFrames).toBe(30);
+    expect(clips[2].relation).toBe('overlap');
+    expect(clips[2].overlapBeforeFrames).toBe(30);
+
+    expect(breaks).toHaveLength(2);
+    expect(breaks[0]).toMatchObject({
+      kind: 'overlap',
+      afterClipId: 'long',
+      beforeClipId: 's1',
+      durationFrames: 30
+    });
+    expect(breaks[0].start.timecode).toBe('00:10:02;00');
+    expect(breaks[0].end.timecode).toBe('00:10:03;00');
+    expect(breaks[1]).toMatchObject({
+      kind: 'overlap',
+      afterClipId: 'long',
+      beforeClipId: 's2',
+      durationFrames: 30
+    });
+    expect(breaks[1].start.timecode).toBe('00:10:05;00');
+    expect(breaks[1].end.timecode).toBe('00:10:06;00');
+
+    // 互不相接的短片，重叠带也互不覆盖，累计审阅范围就是两段自身长度之和。
+    expect(breaks[0].end.frame).toBeLessThanOrEqual(breaks[1].start.frame);
+    expect(firstBreak?.beforeClipId).toBe('s1');
+    expect(clips[1].firstBreak).toBe(true);
+  });
+
+  it('keeps numeric and textual ids that look alike as distinct identities end to end', () => {
+    const response = analyzeInput({
+      rate: '30000/1001',
+      clips: [
+        {
+          id: 1,
+          sourceIn: '01:00:00;00',
+          sourceOut: '01:00:05;00',
+          recordIn: '00:10:00;00'
+        },
+        {
+          id: '1',
+          sourceIn: '02:00:00;00',
+          sourceOut: '02:00:05;00',
+          recordIn: '00:10:06;00'
+        }
+      ]
+    });
+    expect(response.ok).toBe(true);
+    if (!response.ok) throw new Error(response.issues[0]?.message);
+
+    const { clips, firstBreak } = response.result;
+    expect(clips[0].id).toBe(1);
+    expect(clips[1].id).toBe('1');
+    expect(clips[1].relation).toBe('gap');
+    expect(clips[1].gapBeforeFrames).toBe(30);
+    expect(clips[1].previousClipId).toBe(1);
+
+    expect(firstBreak?.kind).toBe('gap');
+    expect(firstBreak?.afterClipId).toBe(1);
+    expect(firstBreak?.beforeClipId).toBe('1');
+    expect(typeof firstBreak?.afterClipId).toBe('number');
+    expect(typeof firstBreak?.beforeClipId).toBe('string');
+
+    // 导出快照经 JSON 往返后仍保留两种 id 的类型身份。
+    const exported = JSON.parse(JSON.stringify(response.result)) as typeof response.result;
+    expect(exported.clips[0].id).toBe(1);
+    expect(exported.clips[1].id).toBe('1');
+    expect(exported.firstBreak?.afterClipId).toBe(1);
+    expect(exported.firstBreak?.beforeClipId).toBe('1');
+
+    // 屏幕展示必须能区分二者。
+    expect(formatClipId(1)).toBe('1');
+    expect(formatClipId('1')).toBe('"1"');
+    expect(formatClipId(1)).not.toBe(formatClipId('1'));
   });
 
   it('rejects structural errors, forbidden frames, non-positive durations, duplicates, and day wrap', () => {

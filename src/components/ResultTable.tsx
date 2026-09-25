@@ -1,4 +1,4 @@
-import { AnalyzedClip } from '../lib/analysis';
+import { AnalyzedClip, formatClipId } from '../lib/analysis';
 
 interface ResultTableProps {
   clips: AnalyzedClip[];
@@ -32,7 +32,7 @@ export function ResultTable({ clips }: ResultTableProps) {
           {clips.map((clip, index) => (
             <tr key={`${String(clip.id)}-${clip.inputIndex}`} className={clip.firstBreak ? 'first-break-row' : ''}>
               <td>{index + 1}</td>
-              <td className="clip-id">{String(clip.id)}</td>
+              <td className="clip-id">{formatClipId(clip.id)}</td>
               <td>{clip.sourceIn.timecode}</td>
               <td>{clip.sourceOut.timecode}</td>
               <td>{clip.recordIn.timecode}</td>
@@ -41,7 +41,7 @@ export function ResultTable({ clips }: ResultTableProps) {
               <td>
                 <span className={`badge badge-${clip.relation}`}>{RELATION_TEXT[clip.relation]}</span>
                 {clip.previousClipId !== undefined && (
-                  <span className="previous-id">接 {String(clip.previousClipId)}</span>
+                  <span className="previous-id">接 {formatClipId(clip.previousClipId)}</span>
                 )}
               </td>
               <td className="number">

@@ -8,6 +8,15 @@ import {
 
 export type ClipId = string | number;
 
+/**
+ * 把片段 id 渲染成可辨认类型的文本：数值原样显示，字符串按 JSON 加引号。
+ * 这样数值编号 1 与文本编号 "1" 在表格、时间线和摘要中不会混为一谈，
+ * 且与导出 JSON 中的身份一一对应。
+ */
+export function formatClipId(id: ClipId): string {
+  return typeof id === 'number' ? String(id) : JSON.stringify(id);
+}
+
 export interface FrameTimecode {
   frame: number;
   timecode: string;
@@ -186,7 +195,7 @@ function validate(rawInput: unknown): {
       if (clipId !== null) {
         if (seenIds.has(clipId)) {
           issues.push(
-            issue('CLIP_ID_DUPLICATE', `片段 id 必须唯一：${String(clipId)}`, `${clipPath}.id`)
+            issue('CLIP_ID_DUPLICATE', `片段 id 必须唯一：${formatClipId(clipId)}`, `${clipPath}.id`)
           );
         }
         seenIds.add(clipId);
@@ -328,13 +337,17 @@ export function analyzeInput(rawInput: unknown): AnalysisResponse {
     }
 
     if (item.recordInFrame < coverageEnd) {
+      // 重叠是半开区间交集 [recordIn, min(recordOut, coverageEnd))：
+      // 短片被长片完全包含时，只计短片自身落在覆盖区内的帧，
+      // 短片结束之后直到长片结束的帧不属于该短片的重叠。
+      const overlapEndFrame = Math.min(item.recordOutFrame, coverageEnd);
       const timelineBreak: TimelineBreak = {
         kind: 'overlap',
         afterClipId: owner.id,
         beforeClipId: item.clip.id,
         start: toFrameTimecode(item.recordInFrame, rate),
-        end: toFrameTimecode(coverageEnd, rate),
-        durationFrames: coverageEnd - item.recordInFrame,
+        end: toFrameTimecode(overlapEndFrame, rate),
+        durationFrames: overlapEndFrame - item.recordInFrame,
         first: false
       };
       breaks.push(timelineBreak);

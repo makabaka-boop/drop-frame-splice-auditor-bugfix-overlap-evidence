@@ -8,6 +8,7 @@
 - 支持 1–200 个片段，每片包含唯一 `id`、`sourceIn`、`sourceOut`、`recordIn`。
 - `sourceOut` 为排他端，时长按整数帧计算：`sourceOut - sourceIn`。
 - `recordOut = recordIn + durationFrames`，拒绝零时长、负时长和触碰 24 小时回绕点的录制区间。
+- 重叠按半开区间交集 `[recordIn, min(recordOut, 覆盖端))` 计帧：长片完全覆盖短片时只计短片自身落在覆盖区内的帧；同一长片内多个互不相接的短片各自形成独立、互不遮盖的重叠段。
 - 校验非整十分钟边界的禁用帧：
   - 29.97：`MM:SS;00`、`MM:SS;01`（`MM % 10 !== 0` 且 `SS=00`）不存在。
   - 59.94：`MM:SS;00` 至 `MM:SS;03` 不存在。
@@ -31,7 +32,7 @@
 }
 ```
 
-`id` 可以是非空字符串或安全整数，并且在整份输入中必须唯一。未知根字段、未知片段字段、重复 id、非法结构都会导致整份拒绝。
+`id` 可以是非空字符串或安全整数，并且在整份输入中必须唯一（数值 `1` 与文本 `"1"` 是两个不同 id）。界面中字符串 id 以 JSON 形式加引号显示、数值 id 原样显示，两者在表格、时间线和断点摘要中可以区分；导出 JSON 保留原始类型。未知根字段、未知片段字段、重复 id、非法结构都会导致整份拒绝。
 
 ## 本地开发
 
@@ -77,4 +78,6 @@ docker compose up --build
 - frame → timecode → frame 与 timecode → frame → timecode 往返；
 - 24 小时边界。
 
-`src/lib/analysis.test.ts` 覆盖 recordOut、按录制位置排序、空隙、重叠、包含关系、非法输入拒绝和导出快照。
+`src/lib/analysis.test.ts` 覆盖 recordOut、按录制位置排序、空隙、重叠、完全包含与同一长片内多个短片的独立重叠段、混合类型 id 身份、非法输入拒绝和导出快照。
+
+`src/components/Timeline.test.ts` 覆盖全日视图与日末滚动时标尺刻度不触碰 24 小时回绕点、各缩放级别刻度均可格式化。

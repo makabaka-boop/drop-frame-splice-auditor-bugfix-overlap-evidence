@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { AnalysisResult } from '../lib/analysis';
+import { AnalysisResult, formatClipId } from '../lib/analysis';
 import { formatFrame } from '../lib/timecode';
 
 interface TimelineProps {
@@ -38,6 +38,32 @@ function chooseTickStep(pixelsPerFrame: number, targetPixels: number, dayFrames:
   return candidates.find((step) => step * pixelsPerFrame >= targetPixels) ?? dayFrames;
 }
 
+export interface RulerTicks {
+  step: number;
+  values: number[];
+}
+
+/**
+ * 计算可视范围内的标尺刻度帧号。刻度必须落在 [0, dayFrames) 内：
+ * 24 小时回绕点本身不是合法帧，交给 formatFrame 会抛错，
+ * 因此全日视图或滚动到日末时端点只到日内最后一格为止。
+ */
+export function computeRulerTicks(
+  pixelsPerFrame: number,
+  scrollLeft: number,
+  viewportWidth: number,
+  dayFrames: number
+): RulerTicks {
+  const step = chooseTickStep(pixelsPerFrame, 96, dayFrames);
+  const firstFrame = Math.max(0, Math.floor(scrollLeft / pixelsPerFrame / step) * step);
+  const lastVisibleFrame = (scrollLeft + viewportWidth) / pixelsPerFrame;
+  const values: number[] = [];
+  for (let frame = firstFrame; frame < Math.min(dayFrames, lastVisibleFrame + step); frame += step) {
+    values.push(frame);
+  }
+  return { step, values };
+}
+
 export function Timeline({ result, pixelsPerFrame, active }: TimelineProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [viewport, setViewport] = useState({ scrollLeft: 0, width: 1200 });
@@ -70,16 +96,10 @@ export function Timeline({ result, pixelsPerFrame, active }: TimelineProps) {
     });
   }, [active, result.firstBreak]);
 
-  const ticks = useMemo(() => {
-    const step = chooseTickStep(pixelsPerFrame, 96, result.dayFrames);
-    const firstFrame = Math.max(0, Math.floor(viewport.scrollLeft / pixelsPerFrame / step) * step);
-    const lastVisibleFrame = (viewport.scrollLeft + viewport.width) / pixelsPerFrame;
-    const values: number[] = [];
-    for (let frame = firstFrame; frame <= Math.min(result.dayFrames, lastVisibleFrame + step); frame += step) {
-      values.push(frame);
-    }
-    return { step, values };
-  }, [pixelsPerFrame, viewport, result.dayFrames]);
+  const ticks = useMemo(
+    () => computeRulerTicks(pixelsPerFrame, viewport.scrollLeft, viewport.width, result.dayFrames),
+    [pixelsPerFrame, viewport, result.dayFrames]
+  );
 
   const x = (frame: number) => frame * pixelsPerFrame;
 
@@ -137,12 +157,12 @@ export function Timeline({ result, pixelsPerFrame, active }: TimelineProps) {
                 className={`clip-rect clip-${clip.relation} ${clip.firstBreak ? 'clip-first-break' : ''}`}
               >
                 <title>
-                  {`片段 ${String(clip.id)}\nrecordIn ${clip.recordIn.timecode}\nrecordOut ${clip.recordOut.timecode}\n时长 ${clip.durationFrames} 帧`}
+                  {`片段 ${formatClipId(clip.id)}\nrecordIn ${clip.recordIn.timecode}\nrecordOut ${clip.recordOut.timecode}\n时长 ${clip.durationFrames} 帧`}
                 </title>
               </rect>
               {clipWidth >= 34 && (
                 <text x={left + 6} y="67" className="clip-label">
-                  {String(clip.id)}
+                  {formatClipId(clip.id)}
                 </text>
               )}
             </g>
